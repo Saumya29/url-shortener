@@ -24,7 +24,8 @@ All error responses use a consistent JSON format:
 |------|------------------------------------------------------|
 | 200  | Success                                              |
 | 201  | Resource created                                     |
-| 301  | Redirect to original URL                             |
+| 204  | No content (successful deletion)                     |
+| 302  | Redirect to original URL                             |
 | 400  | Bad request (missing or invalid parameters)          |
 | 404  | Resource not found                                   |
 | 500  | Internal server error                                |
@@ -88,10 +89,11 @@ Content-Type: application/json
 ```json
 {
   "id": 1,
-  "original_url": "https://docs.anthropic.com/en/docs/welcome",
-  "short_code": "aBcD1eF",
-  "created_at": "2025-01-15 12:00:00",
-  "click_count": 0
+  "originalUrl": "https://docs.anthropic.com/en/docs/welcome",
+  "shortCode": "aBcD1eF",
+  "shortUrl": "http://localhost:3001/r/aBcD1eF",
+  "createdAt": "2025-01-15 12:00:00",
+  "clickCount": 0
 }
 ```
 
@@ -128,24 +130,27 @@ GET /api/urls
 [
   {
     "id": 3,
-    "original_url": "https://en.wikipedia.org/wiki/URL_shortening",
-    "short_code": "xYz9876",
-    "created_at": "2025-01-15 12:02:00",
-    "click_count": 5
+    "originalUrl": "https://en.wikipedia.org/wiki/URL_shortening",
+    "shortCode": "xYz9876",
+    "shortUrl": "http://localhost:3001/r/xYz9876",
+    "createdAt": "2025-01-15 12:02:00",
+    "clickCount": 5
   },
   {
     "id": 2,
-    "original_url": "https://docs.anthropic.com/en/docs/welcome",
-    "short_code": "aBcD1eF",
-    "created_at": "2025-01-15 12:01:00",
-    "click_count": 12
+    "originalUrl": "https://docs.anthropic.com/en/docs/welcome",
+    "shortCode": "aBcD1eF",
+    "shortUrl": "http://localhost:3001/r/aBcD1eF",
+    "createdAt": "2025-01-15 12:01:00",
+    "clickCount": 12
   },
   {
     "id": 1,
-    "original_url": "https://github.com/anthropics/claude-code",
-    "short_code": "gH3jK5m",
-    "created_at": "2025-01-15 12:00:00",
-    "click_count": 0
+    "originalUrl": "https://github.com/anthropics/claude-code",
+    "shortCode": "gH3jK5m",
+    "shortUrl": "http://localhost:3001/r/gH3jK5m",
+    "createdAt": "2025-01-15 12:00:00",
+    "clickCount": 0
   }
 ]
 ```
@@ -158,14 +163,14 @@ curl http://localhost:3001/api/urls
 
 ---
 
-### Resolve Short URL (Redirect)
+### Get Single URL
 
-Redirect to the original URL associated with a short code. This endpoint also increments the click counter.
+Retrieve a single shortened URL by its short code.
 
 **Request**
 
 ```
-GET /:shortCode
+GET /api/urls/:shortCode
 ```
 
 **Parameters**
@@ -174,7 +179,50 @@ GET /:shortCode
 |-------------|--------|----------|----------------------|
 | `shortCode` | string | path     | The 7-character short code |
 
-**Response** `301 Moved Permanently`
+**Response** `200 OK`
+
+```json
+{
+  "id": 1,
+  "originalUrl": "https://docs.anthropic.com/en/docs/welcome",
+  "shortCode": "aBcD1eF",
+  "shortUrl": "http://localhost:3001/r/aBcD1eF",
+  "createdAt": "2025-01-15 12:00:00",
+  "clickCount": 12
+}
+```
+
+**Errors**
+
+| Status | Error              | Cause                                  |
+|--------|--------------------|----------------------------------------|
+| 404    | `URL not found`    | No URL exists with the given short code |
+
+**Example**
+
+```bash
+curl http://localhost:3001/api/urls/aBcD1eF
+```
+
+---
+
+### Resolve Short URL (Redirect)
+
+Redirect to the original URL associated with a short code. This endpoint also increments the click counter.
+
+**Request**
+
+```
+GET /r/:shortCode
+```
+
+**Parameters**
+
+| Parameter   | Type   | Location | Description          |
+|-------------|--------|----------|----------------------|
+| `shortCode` | string | path     | The 7-character short code |
+
+**Response** `302 Found`
 
 Redirects to the original URL via the `Location` header.
 
@@ -188,10 +236,10 @@ Redirects to the original URL via the `Location` header.
 
 ```bash
 # Follow redirect
-curl -L http://localhost:3001/aBcD1eF
+curl -L http://localhost:3001/r/aBcD1eF
 
 # See redirect without following
-curl -I http://localhost:3001/aBcD1eF
+curl -I http://localhost:3001/r/aBcD1eF
 ```
 
 ---
@@ -212,13 +260,9 @@ DELETE /api/urls/:shortCode
 |-------------|--------|----------|----------------------|
 | `shortCode` | string | path     | The 7-character short code |
 
-**Response** `200 OK`
+**Response** `204 No Content`
 
-```json
-{
-  "message": "URL deleted"
-}
-```
+Returns an empty response body on success.
 
 **Errors**
 
@@ -241,7 +285,8 @@ Every URL object returned by the API has the following shape:
 | Field          | Type    | Description                                      |
 |----------------|---------|--------------------------------------------------|
 | `id`           | integer | Auto-incremented primary key                     |
-| `original_url` | string  | The full original URL                            |
-| `short_code`   | string  | 7-character nanoid identifier                    |
-| `created_at`   | string  | ISO-ish datetime of creation (`YYYY-MM-DD HH:MM:SS`) |
-| `click_count`  | integer | Number of times the short URL has been resolved  |
+| `originalUrl`  | string  | The full original URL                            |
+| `shortCode`    | string  | 7-character nanoid identifier                    |
+| `shortUrl`     | string  | Full redirect URL (e.g., `http://localhost:3001/r/aBcD1eF`) |
+| `createdAt`    | string  | Datetime of creation (`YYYY-MM-DD HH:MM:SS`)    |
+| `clickCount`   | integer | Number of times the short URL has been resolved  |
