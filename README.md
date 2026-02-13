@@ -2,6 +2,8 @@
 
 A full-stack URL shortener built as a monorepo with npm workspaces. Shorten long URLs into compact, shareable links with click tracking and a dashboard.
 
+**Live Demo:** https://url-shortener-smoky-six.vercel.app
+
 ## Features
 
 - Shorten any URL into a compact Base62-encoded link
@@ -29,7 +31,7 @@ npm install
 # Start the backend (port 3001)
 npm run dev:backend
 
-# Start the frontend (port 3000) — in a separate terminal
+# Start the frontend (port 3000) - in a separate terminal
 npm run dev:frontend
 ```
 
@@ -59,10 +61,10 @@ See [docs/API.md](docs/API.md) for full endpoint documentation with examples.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — tech stack choices and tradeoffs
-- [Setup Guide](docs/SETUP.md) — installation, running, and troubleshooting
-- [API Reference](docs/API.md) — endpoint documentation
-- [Decisions](docs/DECISIONS.md) — technical decision records
+- [Architecture](docs/ARCHITECTURE.md) - tech stack choices and tradeoffs
+- [Setup Guide](docs/SETUP.md) - installation, running, and troubleshooting
+- [API Reference](docs/API.md) - endpoint documentation
+- [Decisions](docs/DECISIONS.md) - technical decision records
 
 ## Design
 
