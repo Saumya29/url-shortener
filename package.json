@@ -9,6 +9,7 @@
     "frontend"
   ],
   "scripts": {
+    "start": "npm start --workspace=backend",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "lint": "eslint ."
