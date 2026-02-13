@@ -24,8 +24,8 @@ export default function UrlCard({ url, onDelete }) {
           </p>
           <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
             <span>{createdDate}</span>
-            {url.clicks !== undefined && (
-              <span>{url.clicks} click{url.clicks !== 1 ? 's' : ''}</span>
+            {url.clickCount !== undefined && (
+              <span>{url.clickCount} click{url.clickCount !== 1 ? 's' : ''}</span>
             )}
           </div>
         </div>

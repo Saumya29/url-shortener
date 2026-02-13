@@ -14,7 +14,7 @@ export default function UrlList() {
     setError('');
     try {
       const data = await getUrls();
-      setUrls(data.urls || []);
+      setUrls(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message);
     } finally {
