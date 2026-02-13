@@ -1,12 +1,25 @@
-import { nanoid } from 'nanoid';
+const BASE62_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+function toBase62(num) {
+  if (num === 0) return BASE62_CHARS[0];
+  let result = '';
+  while (num > 0) {
+    result = BASE62_CHARS[num % 62] + result;
+    num = Math.floor(num / 62);
+  }
+  return result;
+}
 
 export function createUrl(db, originalUrl) {
-  const shortCode = nanoid(7);
   const stmt = db.prepare(
     'INSERT INTO urls (original_url, short_code) VALUES (?, ?)'
   );
-  const result = stmt.run(originalUrl, shortCode);
-  return db.prepare('SELECT * FROM urls WHERE id = ?').get(result.lastInsertRowid);
+  // Insert with placeholder, then update with Base62-encoded ID
+  const result = stmt.run(originalUrl, '__pending__');
+  const id = result.lastInsertRowid;
+  const shortCode = toBase62(Number(id));
+  db.prepare('UPDATE urls SET short_code = ? WHERE id = ?').run(shortCode, id);
+  return db.prepare('SELECT * FROM urls WHERE id = ?').get(id);
 }
 
 export function findByCode(db, shortCode) {
