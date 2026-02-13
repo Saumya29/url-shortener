@@ -62,32 +62,47 @@ The database schema consists of a single `urls` table with columns: `id` (auto-i
 
 ---
 
-## ADR-003: Nanoid for Short Codes
+## ADR-003: Base62 Counter-Based Short Codes
 
-**Status:** Accepted
+**Status:** Accepted (supersedes initial nanoid approach)
 
 ### Context
 
-Each shortened URL needs a unique, compact identifier that appears in the shortened URL path (e.g., `/aBcD1eF`). The identifier must be URL-safe, resistant to collisions, and short enough to be practical.
+Each shortened URL needs a unique, compact identifier that appears in the shortened URL path (e.g., `/r/4c92`). The identifier must be URL-safe, collision-free, and as short as possible.
+
+This decision was informed by [Hello Interview's system design breakdown of Bitly](https://www.hellointerview.com/learn/system-design/problem-breakdowns/bitly), which recommends a counter-based approach with Base62 encoding for production URL shorteners.
 
 Options considered:
-- **nanoid** -- cryptographically random, URL-safe, configurable length
+- **Base62 encoding of auto-increment ID** -- deterministic, zero collisions, variable length
+- **nanoid** -- cryptographically random, URL-safe, fixed length
+- **MD5/SHA-256 hash prefix** -- hash the URL, take first N characters
 - **UUID v4** -- universally unique, 36 characters
-- **hashids** -- encodes integers into short, reversible strings
-- **Sequential IDs** -- auto-incrementing integers
 
 ### Decision
 
-Use `nanoid` with a length of 7 characters. The default nanoid alphabet (`A-Za-z0-9_-`) produces URL-safe strings without encoding.
+Use SQLite's `AUTOINCREMENT` primary key as a counter, then encode each integer ID into a Base62 string (charset: `0-9A-Za-z`). This mirrors the architecture of production URL shorteners like Bitly, which use an atomic counter (Redis `INCR` at scale) with Base62 encoding.
+
+The encoding is deterministic and reversible: `toBase62(1000) = "g8"`, `toBase62(1000000) = "4c92"`. Codes grow organically -- staying compact until the ID space demands longer strings (62^6 = 56 billion before needing 7 characters).
+
+### Why Not Hashing?
+
+Hashing (MD5/SHA-256) introduces collision risk when truncating to a short prefix. Two different URLs could produce the same 7-character prefix, requiring collision detection and resolution. The counter approach eliminates this class of bugs entirely.
+
+### Why Not Nanoid?
+
+Nanoid was the initial implementation but was replaced because:
+1. **Collision risk** -- however small, random generation has a non-zero probability of duplicates, requiring retry logic or UNIQUE constraint handling
+2. **Fixed length** -- nanoid always produces 7-character codes, while Base62 produces shorter codes for smaller IDs (`"1"` vs `"aBcD1eF"`)
+3. **Extra dependency** -- Base62 encoding is ~10 lines of code with no external package
 
 ### Consequences
 
-- **Positive:** At 7 characters with a 64-character alphabet, the ID space is 64^7 = ~4.4 billion combinations. Collision probability is negligible for any practical dataset size.
-- **Positive:** Cryptographically random generation means IDs are not guessable or sequential, providing a basic level of obscurity.
-- **Positive:** URL-safe by default -- no percent-encoding needed in paths.
-- **Negative:** Not human-readable. Users cannot infer anything about the destination from the short code.
-- **Negative:** No inherent ordering. Creation time cannot be derived from the code, though the database stores `created_at` separately.
-- **Negative:** Theoretical (though astronomically unlikely) collision risk. The insert would fail due to the UNIQUE constraint, but no retry logic is currently implemented.
+- **Positive:** Zero collision guarantee -- every auto-incremented ID maps to exactly one unique Base62 string.
+- **Positive:** Shorter codes for early URLs (ID 1000 = 2 chars vs nanoid's fixed 7 chars).
+- **Positive:** No external dependency -- the encoding is a simple pure function.
+- **Positive:** Follows industry-standard pattern used by Bitly and similar services at scale.
+- **Negative:** Codes are sequential and predictable. An attacker could enumerate valid short codes by incrementing. Mitigation: shuffle the Base62 alphabet or add a fixed offset if obscurity is needed.
+- **Negative:** At very large scale, a single auto-increment counter becomes a write bottleneck. Mitigation (not needed here): use a distributed ID generator like Twitter Snowflake or Redis INCR across shards.
 
 ---
 
@@ -147,7 +162,32 @@ Use Next.js 14 with the App Router, styled with Tailwind CSS. The frontend runs 
 
 ---
 
-## ADR-006: ESLint Flat Config
+## ADR-006: HTTP 302 Temporary Redirect
+
+**Status:** Accepted
+
+### Context
+
+When a user visits a short URL (`/r/:shortCode`), the server must redirect them to the original long URL. HTTP provides two main redirect status codes: 301 (Permanent) and 302 (Temporary). The choice between them has significant implications for analytics and caching behavior.
+
+This decision was informed by [Hello Interview's Bitly system design analysis](https://www.hellointerview.com/learn/system-design/problem-breakdowns/bitly), which explains why production URL shorteners like Bitly use 302 redirects.
+
+### Decision
+
+Use HTTP 302 (Found / Temporary Redirect) for all short URL redirections.
+
+### Consequences
+
+- **Positive:** Browsers do not cache 302 responses, so every click on a short URL hits our server. This enables accurate click counting and analytics -- every visit is recorded.
+- **Positive:** If the destination URL is updated or the short link is expired/deleted, the change takes effect immediately since browsers always check with the server.
+- **Positive:** Enables future features like A/B testing, geographic routing, or time-based redirects without client-side caching issues.
+- **Negative:** Higher server load compared to 301 -- every click requires a server round-trip. A 301 redirect would allow browsers to cache the mapping and skip the server entirely on repeat visits.
+- **Negative:** Slightly higher latency for repeat visitors (extra network hop to our server before reaching the destination).
+- **Note:** For a service like Bitly where analytics are a core product, 302 is the necessary choice. If analytics were not needed and performance were paramount, 301 would reduce server costs at the expense of visibility.
+
+---
+
+## ADR-007: ESLint Flat Config
 
 **Status:** Accepted
 

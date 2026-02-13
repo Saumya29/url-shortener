@@ -43,15 +43,15 @@ URL Shortener is a full-stack monorepo application that creates and resolves sho
                          |   - connection (singleton)|
                          |   - schema (auto-migrate) |
                          |   - models/url (CRUD)     |
-                         |   - nanoid (short codes)  |
+                         |   - Base62 (short codes)  |
                          +--------------------------+
 ```
 
 ## Data Flow
 
-1. **Shorten URL** -- The frontend sends a POST request with `originalUrl` to the backend API. The `validateUrl` middleware verifies the URL format. The database layer generates a 7-character nanoid short code, inserts the record, and returns it.
+1. **Shorten URL** -- The frontend sends a POST request with `originalUrl` to the backend API. The `validateUrl` middleware verifies the URL format. The database layer inserts the record, then Base62-encodes the auto-incremented row ID to produce a deterministic, collision-free short code. This follows the counter-based approach used by production URL shorteners like Bitly (see [Hello Interview's Bitly breakdown](https://www.hellointerview.com/learn/system-design/problem-breakdowns/bitly)).
 
-2. **Resolve URL** -- A GET request with a short code hits the backend. The database layer looks up the code, increments the click counter, and the backend issues an HTTP redirect to the original URL.
+2. **Resolve URL** -- A GET request with a short code hits the backend at `GET /r/:shortCode`. The database layer looks up the code, increments the click counter, and the backend issues an HTTP 302 (temporary) redirect to the original URL. A 302 is used instead of 301 because it forces the browser to always hit our server, enabling accurate click analytics -- a 301 (permanent) redirect would be cached by browsers, causing subsequent visits to bypass our server entirely and making click tracking impossible.
 
 3. **List URLs** -- The frontend fetches all shortened URLs from the backend. The database returns rows ordered by `created_at DESC`.
 
@@ -89,13 +89,19 @@ URL Shortener is a full-stack monorepo application that creates and resolves sho
 
 **Tradeoff:** No built-in task orchestration, caching, or dependency graph execution. For larger projects with many packages and complex build pipelines, a dedicated tool would provide better performance.
 
-### nanoid (Short Code Generation)
+### Base62 Counter-Based Short Codes
 
-**Chosen over:** UUID, hashids, sequential IDs
+**Chosen over:** nanoid, UUID, MD5/SHA-256 hashing
 
-**Why:** Generates compact, URL-safe, cryptographically random identifiers. At 7 characters with the default alphabet (A-Za-z0-9_-), the collision space is large enough for millions of URLs.
+**Why:** This follows the same approach recommended in [Bitly's system design](https://www.hellointerview.com/learn/system-design/problem-breakdowns/bitly). Each URL gets a unique auto-incremented integer ID from SQLite, which is then encoded into a compact Base62 string (charset: `0-9A-Za-z`). This guarantees zero collisions -- every ID maps to exactly one short code, and vice versa.
 
-**Tradeoff:** Not human-readable or sequential. Cannot derive creation order from the code itself. Collision is theoretically possible (though astronomically unlikely at 7 characters for reasonable dataset sizes).
+**How it works:** ID `1` → `"1"`, ID `62` → `"10"`, ID `1000000` → `"4c92"`. Even at 1 billion URLs, codes stay under 6 characters. The approach scales to 62^7 (3.5 trillion) URLs before needing 8-character codes.
+
+**Why not hashing (MD5/SHA-256)?** Hashing the original URL and taking a prefix risks collisions -- two different URLs could produce the same prefix, requiring collision resolution logic. The counter approach eliminates this entirely.
+
+**Why not nanoid?** While nanoid generates URL-safe random strings with low collision probability, it's probabilistic -- collisions are unlikely but possible. A counter-based approach provides a mathematical guarantee of uniqueness. It also produces shorter codes (ID `1000` = `"g8"` vs nanoid's fixed 7 chars).
+
+**Tradeoff:** Short codes are sequential/predictable (someone could guess codes by incrementing). For a public-facing service at scale, this could be mitigated by adding an offset or shuffling the Base62 alphabet. Not an issue for this application's scope.
 
 ### Tailwind CSS (Styling)
 
